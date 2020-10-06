@@ -111,7 +111,8 @@ class GerritGit(object):
         shutil.rmtree(self._git_dir)
 
     def apply_patchset_and_cleanup(self, patchset: Patchset):
-        self.setup_git_dir()
+        if not os.path.isdir('gerrit_git_dir'):
+            self.setup_git_dir()
         for patch in patchset.patches:
             self.push_patch(patch)
         self.cleanup_git_dir()

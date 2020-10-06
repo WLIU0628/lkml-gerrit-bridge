@@ -15,9 +15,6 @@
 import subprocess
 import os
 
-# TODO(willliu@google.com): bump this value up
-MAX_NUMBER_OF_RECENT_COMMITS = 2
-    
 def fill_message_directory(archive_path: str, directory: str, last_used_commit_hash: str) -> str:
     '''Updates the git repo, then retrieves the MAX_NUMBER_OF_RECENT_COMMITS recent commits and converts them into files stored
     in the directory corresponding to the passed in directory path. 
@@ -38,15 +35,14 @@ def fill_message_directory(archive_path: str, directory: str, last_used_commit_h
     subprocess.check_call(['git', '-C', archive_path, 'fetch'])
     
     output = subprocess.check_output(
-        ['git', '-C', archive_path, 'log', '--format=format:%H', '-n',str(MAX_NUMBER_OF_RECENT_COMMITS)])
+        ['git', '-C', archive_path, 'log', f'{last_used_commit_hash}..', '--format=format:%H'])
     message_hashes = output.decode('utf-8').split()
     
     if len(message_hashes) == 0:
-        raise Exception(f'There are no commits in git repo: {archive_path}')
+        print(f'There are no commits in git repo: {archive_path}')
+        return last_used_commit_hash
     
     for hash in message_hashes:
-        if hash == last_used_commit_hash:
-            break
         file = os.path.join(directory, f'{hash}.txt')
         # TODO(willliu@google.com): fetch the message contents on demand. We also don't check for errors creating the file
         with open(file, 'w') as f:
@@ -56,7 +52,7 @@ def fill_message_directory(archive_path: str, directory: str, last_used_commit_h
     return message_hashes[0]
     
 def main():
-    print(fill_message_directory('../linux-kselftest/git/0.git', '../lkml-gerrit-bridge/test_data', '5227e860278407173cbfdab594676764153c27e1'))
+    print(fill_message_directory('../linux-kselftest/git/0.git', '../lkml-gerrit-bridge/test_data', 'cc49e216e3fdff0ffed7675dc7215aba5e3d05cc'))
     
 if __name__ == '__main__':
     main()

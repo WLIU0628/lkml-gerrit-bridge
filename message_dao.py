@@ -16,6 +16,7 @@ from typing import Dict, Optional
 from setup_gmail import Message
 
 class MessageDao(object):
+
     def __init__(self):
         # Maps message.id to message
         self._messages_seen : Dict[str, Message] = {}
@@ -28,3 +29,7 @@ class MessageDao(object):
 
     def size(self) -> int:
         return len(self._messages_seen)
+
+    # This function is currently hardcoded because it will not be used until post database integration.
+    def get_last_hash(self) -> str:
+        return 'cc49e216e3fdff0ffed7675dc7215aba5e3d05cc'
