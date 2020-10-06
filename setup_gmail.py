@@ -61,7 +61,7 @@ class Message(object):
             return match.group(1)
         else:
             return None
-        
+
     def is_patch(self) -> bool:
         if re.match(r'\[.+ (\d+)/(\d+)\] .+', self.subject):
             return True
