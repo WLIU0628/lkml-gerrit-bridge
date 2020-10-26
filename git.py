@@ -16,14 +16,17 @@ import os
 import re
 import shutil
 import subprocess
+import message_dao
 from patch_parser import Patch, Patchset
 
 def git(verb: str, *args, cwd=None, input=None) -> str:
-    print(args)
+    print(input)
+    print(f'git {verb} ' + ' '.join(args))
     print(list(args))
     result = subprocess.run(['git', verb] + list(args),
                             cwd=cwd, input=input,
                             text=True,
+                            check = True,
                             stderr=subprocess.STDOUT,
                             stdout=subprocess.PIPE)
     stdout = str(result.stdout)
@@ -58,9 +61,14 @@ GERRIT_CHANGE_ID_MATCHER = re.compile(r'^https://[\w/+.-]+\+/(\d+)$')
 def _parse_gerrit_patch_push(gerrit_result: str) -> str:
     print(gerrit_result)
     match = GERRIT_PUSH_MATCHER.search(gerrit_result)
+    if match is None:
+      raise ValueError(f'Could not find change url from gerrit output: {gerrit_result}')
     change_url = match.group(1)
     print('change_url = ' + change_url)
+
     match = GERRIT_CHANGE_ID_MATCHER.match(change_url)
+    if match is None:
+      raise ValueError(f'Could not extract change id from gerrit output: {gerrit_result}')
     change_id = match.group(1)
     print('change_id = ' + change_id)
     return change_id
@@ -85,11 +93,18 @@ class GerritGit(object):
         print(patch.text_with_headers)
         return self._git.am(patch.text_with_headers)
 
+
     def push_changes(self):
         return self._git.push('HEAD:refs/for/' + self._branch)
 
     def push_patch(self, patch: Patch) -> Patch:
-        self.apply_patch(patch)
+        try:
+            self.apply_patch(patch)
+        except subprocess.CalledProcessError:
+            # TODO(@willliu): change to log
+            print('Failed to apply. Aborting...')
+            git('am', '--abort', cwd=self._git_dir)
+            raise
         self.amend_commit()
         gerrit_output = self.push_changes()
         change_id = _parse_gerrit_patch_push(gerrit_output)
@@ -105,8 +120,19 @@ class GerritGit(object):
     def cleanup_git_dir(self):
         shutil.rmtree(self._git_dir)
 
-    def apply_patchset_and_cleanup(self, patchset: Patchset) -> Patchset:
-        self.setup_git_dir()
+    # Pass in the dao so that patches can be updated when they are pushed, this way less lost data when an error happens
+    def apply_patchset_and_cleanup(self, patchset: Patchset, messages_dao: message_dao.MessageDao):
+        if not os.path.isdir(self._git_dir):
+            self.setup_git_dir()
         for patch in patchset.patches:
-            self.push_patch(patch)
-        self.cleanup_git_dir()
+            # This should cause the server to clean up the git dir because of potential failures
+            try:
+                message = messages_dao.get(patch.message_id)
+                if message:
+                    message.change_id = self.push_patch(patch).change_id
+                    messages_dao.store(message)
+            except:
+                self.cleanup_git_dir()
+                raise
+
+

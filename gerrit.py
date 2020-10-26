@@ -28,7 +28,8 @@ from requests import PreparedRequest
 from requests.auth import AuthBase
 from http.cookiejar import CookieJar, MozillaCookieJar
 from setup_gmail import Message
-from setup_gmail import find_thread
+from archive_converter import ArchiveMessageIndex
+from message_dao import MessageDao
 
 def get_gerrit_rest_api(cookie_jar_path: str, gerrit_url: str) -> GerritRestAPI:
     cookie_jar = MozillaCookieJar(cookie_jar_path)
@@ -85,8 +86,10 @@ def find_and_label_all_revision_ids(gerrit: Gerrit, patchset: Patchset):
         find_and_label_revision_id(gerrit, patch)
 
 def upload_comments_for_patch(gerrit: Gerrit, patch: Patch):
-    patch_comments = []
-    file_comments = {}
+    Comments = List[Dict[str,str]]
+
+    patch_comments : List[str] = []
+    file_comments : Dict[str,Comments] = {}
     for comment in patch.comments:
         if not comment.file:
             patch_comments.append(comment.message)
@@ -120,7 +123,9 @@ def main():
     gerrit_git = GerritGit(git_dir='gerrit_git_dir',
                            cookie_jar_path='gerritcookies',
                            url=gob_url, project='linux/kernel/git/torvalds/linux', branch='master')
-    email_thread = find_thread('PATCH v12 00/18')
+    archive_index = ArchiveMessageIndex(MessageDao())
+    archive_index.update('test_data')
+    email_thread = archive_index.find('<20200831110450.30188-1-boyan.karatotev@arm.com>')
     patchset = parse_comments(email_thread)
     gerrit_git.apply_patchset_and_cleanup(patchset)
     find_and_label_all_revision_ids(gerrit, patchset)
