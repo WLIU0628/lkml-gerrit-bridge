@@ -15,6 +15,8 @@
 import subprocess
 import os
 
+from absl import logging
+
 def fill_message_directory(archive_path: str, directory: str, last_used_commit_hash: str) -> str:
     '''Updates the git repo, then retrieves the MAX_NUMBER_OF_RECENT_COMMITS recent commits and converts them into files stored
     in the directory corresponding to the passed in directory path.
@@ -39,7 +41,7 @@ def fill_message_directory(archive_path: str, directory: str, last_used_commit_h
     message_hashes = output.decode('utf-8').split()
 
     if len(message_hashes) == 0:
-        print(f'There are no commits in git repo: {archive_path}')
+        logging.warning('There are no commits in git repo: %s', archive_path)
         return last_used_commit_hash
 
     for hash in message_hashes:
@@ -50,6 +52,12 @@ def fill_message_directory(archive_path: str, directory: str, last_used_commit_h
                             stdout=f)
 
     return message_hashes[0]
+
+def setup_archive(archive_path : str):
+    if not os.path.isdir(archive_path):
+        subprocess.check_call(['git', '-C', '..', 'clone', '--mirror',
+                           'https://lore.kernel.org/linux-kselftest/0',
+                           'linux-kselftest/git/0.git'])
 
 def main():
     print(fill_message_directory('../linux-kselftest/git/0.git', '../lkml-gerrit-bridge/test_data', 'cc49e216e3fdff0ffed7675dc7215aba5e3d05cc'))
