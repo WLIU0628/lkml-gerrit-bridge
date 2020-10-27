@@ -17,6 +17,7 @@ import re
 import shutil
 import subprocess
 import message_dao
+import archive_converter
 from patch_parser import Patch, Patchset
 from absl import logging
 
@@ -92,13 +93,20 @@ class GerritGit(object):
         try:
             output = self._git.am(patch.text_with_headers)
             return output
-        except subprocess.CalledProcessError:
+        except subprocess.CalledProcessError as e:
+            print(e.output)
             logging.warning('Failed to apply patch %s. Aborting...', patch.message_id)
             git('am', '--abort', cwd=self._git_dir)
             raise
 
     def push_changes(self):
-        return self._git.push('HEAD:refs/for/' + self._branch)
+        try:
+            output = self._git.push('HEAD:refs/for/' + self._branch)
+            return output
+        except subprocess.CalledProcessError as e:
+            print(e.output)
+            logging.warning('Failed to push upstream.')
+            raise
 
     def push_patch(self, patch: Patch) -> Patch:
         self.apply_patch(patch)
@@ -112,6 +120,8 @@ class GerritGit(object):
         os.makedirs(self._git_dir)
         self.shallow_clone(depth=clone_depth)
         self._git.config('http.cookiefile', '../' + self._cookie_jar_path)
+        self._git.config('user.name', '"lkml-gerrit-bridge"')
+        self._git.config('user.email', '"willliu@google.com"')
         subprocess.run(CURL_CHANGE_ID_CMD, cwd=self._git_dir, shell=True)
 
     def cleanup_git_dir(self):
@@ -132,4 +142,23 @@ class GerritGit(object):
                 self.cleanup_git_dir()
                 raise
 
+def main():
+    gerrit_git = GerritGit(git_dir='gerrit_git_dirT',
+                           cookie_jar_path='gerritcookies',
+                           url='http://linux.googlesource.com',
+                           project='linux/kernel/git/torvalds/linux',
+                           branch='master')
+    gerrit_git.shallow_clone(depth=1)
+    gerrit_git._git.config('http.cookiefile', '../' + gerrit_git._cookie_jar_path)
+    gerrit_git._git.config('user.name', 'lkml-gerrit-bridge')
+    gerrit_git._git.config('user.email', 'lkml-gerrit-bridge@noreply.com')
+    subprocess.run(CURL_CHANGE_ID_CMD, cwd=gerrit_git._git_dir, shell=True)
+    print('Master branch cloned at ' + git('log', cwd='gerrit_git_dirT'))
+    patch = archive_converter.generate_email_from_file("file.txt")
+    text = 'From: {from_}\nSubject: {subject}\n\n{content}'.format(
+            from_=patch.from_, subject=patch.subject, content=patch.content)
+    actual_patch = Patch(message_id = patch.id, text=patch.content, text_with_headers=text, set_index=0, comments=[])
+    gerrit_git.apply_patch(actual_patch)
 
+if __name__ == '__main__':
+    main()
